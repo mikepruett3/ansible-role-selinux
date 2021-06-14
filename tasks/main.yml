@@ -1,2 +1,37 @@
 ---
 # tasks file for ansible-role-selinux/
+
+- name: Include OS-specific variables.
+  include_vars: "{{ lookup('first_found', params) }}"
+  vars:
+    params:
+      files:
+        - "{{ ansible_os_family }}_{{ ansible_distribution_major_version }}.yaml"
+        - "{{ ansible_distribution }}.yaml"
+        - "{{ ansible_os_family }}.yaml"
+        - default.yaml
+      paths:
+        - "vars"
+
+- name: "Gather the package facts"
+  ansible.builtin.package_facts:
+    manager: auto
+  when: ansible_facts.packages is not defined
+
+- name: "Install libselinux package, if not already installed"
+  ansible.builtin.package:
+    name: "{{ libselinux }}"
+    state: present
+  when:
+    - libselinux|string not in ansible_facts.packages
+    - ansible_os_family == 'RedHat'
+
+- name: "Set SELinux State"
+  selinux:
+      policy: "{{ policy }}"
+      state: "{{ state }}"
+  register: selinux_state
+
+- name: "Reboot host"
+  ansible.builtin.reboot:
+  when: selinux_state.reboot_required
